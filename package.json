@@ -11,12 +11,14 @@
   "description": "",
   "devDependencies": {
     "@types/node": "^24.5.2",
+    "ts-node": "^10.9.2",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",
     "dotenv": "^17.2.2",
-    "fastify": "^5.6.1"
+    "fastify": "^5.6.1",
+    "firebase-admin": "^13.5.0"
   }
 }
