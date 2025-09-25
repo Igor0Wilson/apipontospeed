@@ -35,7 +35,10 @@ const buildApp = () => {
   const app = fastify();
 
   // CORS
-  app.register(cors, { origin: "*" });
+  app.register(cors, {
+    origin: "*",
+    methods: ["GET", "POST", "PATCH", "OPTIONS"],
+  });
 
   // Rotas
   app.get("/api/ponto", async (request, reply) => {
