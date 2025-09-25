@@ -2,17 +2,9 @@ import { fastify } from "fastify";
 import cors from "@fastify/cors";
 import * as admin from "firebase-admin";
 import dotenv from "dotenv";
-import path from "path";
-import { cert } from "firebase-admin/app";
+import { VercelRequest, VercelResponse } from "@vercel/node";
 
 dotenv.config();
-
-const app = fastify();
-
-// ==================== CORS ====================
-app.register(cors, {
-  origin: "*",
-});
 
 // ==================== FIREBASE ====================
 const serviceAccount = {
@@ -26,58 +18,74 @@ const serviceAccount = {
   clientX509CertUrl: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.FIREBASE_CLIENT_EMAIL}`,
 };
 
-// Inicializa o Firebase Admin
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-});
+// Inicializa o Firebase Admin apenas uma vez
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+  });
+}
 
 // Firestore
 const db = admin.firestore();
 const pontosCollection = db.collection("pontos");
 
-export { db, pontosCollection };
-// ==================== ROTAS ====================
-app.get("/api/ponto", async (request, reply) => {
-  try {
-    const snapshot = await pontosCollection.get();
-    const pontos: any[] = [];
-    snapshot.forEach((doc) => pontos.push({ id: doc.id, ...doc.data() }));
-    return { message: "Pontos recuperados com sucesso", pontos };
-  } catch (err: any) {
-    console.error("Erro ao buscar pontos:", err);
-    reply.status(500).send({ error: err.message });
-  }
-});
+// ==================== SERVER ====================
+// Criamos uma instância do Fastify para cada chamada
+const buildApp = () => {
+  const app = fastify();
 
-app.post("/api/ponto", async (request, reply) => {
-  try {
-    const ponto = request.body as {
-      qra: string;
-      patente: string;
-      veiculo: string;
-      inicio: string;
-      fim: string;
-    };
+  // CORS
+  app.register(cors, { origin: "*" });
 
-    // Salva apenas os campos de texto
-    const docRef = await pontosCollection.add({
-      qra: ponto.qra,
-      patente: ponto.patente,
-      veiculo: ponto.veiculo,
-      inicio: ponto.inicio,
-      fim: ponto.fim,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    });
+  // Rotas
+  app.get("/api/ponto", async (request, reply) => {
+    try {
+      const snapshot = await pontosCollection.get();
+      const pontos: any[] = [];
+      snapshot.forEach((doc) => pontos.push({ id: doc.id, ...doc.data() }));
+      return { message: "Pontos recuperados com sucesso", pontos };
+    } catch (err: any) {
+      console.error("Erro ao buscar pontos:", err);
+      reply.status(500).send({ error: err.message });
+    }
+  });
 
-    reply.send({ message: "Ponto salvo com sucesso", id: docRef.id });
-  } catch (err: any) {
-    console.error("Erro ao salvar ponto:", err);
-    reply.status(500).send({ error: err.message });
-  }
-});
+  app.post("/api/ponto", async (request, reply) => {
+    try {
+      const ponto = request.body as {
+        qra: string;
+        patente: string;
+        veiculo: string;
+        inicio: string;
+        fim: string;
+      };
 
-// ==================== LISTEN ====================
-const PORT = Number(process.env.PORT) || 3000;
-app.listen({ port: PORT, host: "0.0.0.0" }).then(() => {
-  console.log(`HTTP server running on port ${PORT}`);
-});
+      const docRef = await pontosCollection.add({
+        qra: ponto.qra,
+        patente: ponto.patente,
+        veiculo: ponto.veiculo,
+        inicio: ponto.inicio,
+        fim: ponto.fim,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      reply.send({ message: "Ponto salvo com sucesso", id: docRef.id });
+    } catch (err: any) {
+      console.error("Erro ao salvar ponto:", err);
+      reply.status(500).send({ error: err.message });
+    }
+  });
+
+  return app;
+};
+
+// ==================== EXPORT PARA VERCEL ====================
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const app = buildApp();
+
+  // Converte a requisição da Vercel para Fastify
+  await app.ready();
+
+  app.server.emit("request", req, res);
+}
