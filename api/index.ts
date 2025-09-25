@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import * as admin from "firebase-admin";
 import dotenv from "dotenv";
 import path from "path";
+import { cert } from "firebase-admin/app";
 
 dotenv.config();
 
@@ -14,13 +15,27 @@ app.register(cors, {
 });
 
 // ==================== FIREBASE ====================
-const serviceAccountPath = path.resolve(process.env.FIREBASE_KEY_PATH || "");
+const serviceAccount = {
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+  clientId: process.env.FIREBASE_CLIENT_ID,
+  authUri: "https://accounts.google.com/o/oauth2/auth",
+  tokenUri: "https://oauth2.googleapis.com/token",
+  authProviderX509CertUrl: "https://www.googleapis.com/oauth2/v1/certs",
+  clientX509CertUrl: `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.FIREBASE_CLIENT_EMAIL}`,
+};
+
+// Inicializa o Firebase Admin
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccountPath),
+  credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
 });
+
+// Firestore
 const db = admin.firestore();
 const pontosCollection = db.collection("pontos");
 
+export { db, pontosCollection };
 // ==================== ROTAS ====================
 app.get("/api/ponto", async (request, reply) => {
   try {
