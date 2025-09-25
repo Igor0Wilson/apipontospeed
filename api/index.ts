@@ -53,6 +53,7 @@ const buildApp = () => {
   app.post("/api/ponto", async (request, reply) => {
     try {
       const ponto = request.body as {
+        divisao: string;
         qra: string;
         patente: string;
         veiculo: string;
@@ -61,6 +62,7 @@ const buildApp = () => {
       };
 
       const docRef = await pontosCollection.add({
+        divisao: ponto.divisao,
         qra: ponto.qra,
         patente: ponto.patente,
         veiculo: ponto.veiculo,
@@ -72,6 +74,33 @@ const buildApp = () => {
       reply.send({ message: "Ponto salvo com sucesso", id: docRef.id });
     } catch (err: any) {
       console.error("Erro ao salvar ponto:", err);
+      reply.status(500).send({ error: err.message });
+    }
+  });
+
+  app.patch("/api/ponto/:id", async (request, reply) => {
+    try {
+      // Tipando params
+      const { id: pontoId } = request.params as { id: string };
+
+      const pontoAtualizado = request.body as {
+        divisao?: string;
+        qra?: string;
+        patente?: string;
+        veiculo?: string;
+        inicio?: string;
+        fim?: string;
+      };
+
+      // Atualiza apenas os campos enviados
+      await pontosCollection.doc(pontoId).update({
+        ...pontoAtualizado,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      reply.send({ message: "Ponto atualizado com sucesso", id: pontoId });
+    } catch (err: any) {
+      console.error("Erro ao atualizar ponto:", err);
       reply.status(500).send({ error: err.message });
     }
   });
