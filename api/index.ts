@@ -235,32 +235,50 @@ const buildApp = () => {
   });
 
   // 2) Login
+  // 2) Login
   app.post("/api/auth/login", async (req, reply) => {
     try {
-      const { qra, senha } = req.body as { qra: string; senha: string };
+      let { qra, senha } = req.body as { qra: string; senha: string };
 
+      // Trim e uppercase para evitar problemas de espaços e case
+      qra = qra.trim().toUpperCase();
+      senha = senha.trim();
+
+      // Busca o usuário pelo QRA
       const snapshot = await usuariosSistemaCollection
         .where("qra", "==", qra)
         .get();
+
       if (snapshot.empty) {
+        console.log("Login falhou: QRA não encontrado", qra);
         return reply.status(401).send({ error: "Credenciais inválidas" });
       }
 
       const userDoc = snapshot.docs[0];
       const usuario = userDoc.data();
 
+      // Verifica se a senha bate
       const senhaValida = await bcrypt.compare(senha, usuario.senha);
       if (!senhaValida) {
+        console.log("Login falhou: senha incorreta para QRA", qra);
         return reply.status(401).send({ error: "Credenciais inválidas" });
       }
 
+      // Gera o token
       const token = gerarToken(userDoc.id);
+
+      // Retorna sucesso
       return reply.send({
         message: "Login bem-sucedido",
         token,
-        usuario: { id: userDoc.id, qra: usuario.qra, patente: usuario.patente },
+        usuario: {
+          id: userDoc.id,
+          qra: usuario.qra,
+          patente: usuario.patente,
+        },
       });
     } catch (err: any) {
+      console.error("Erro no login:", err);
       return reply.status(500).send({ error: err.message });
     }
   });
