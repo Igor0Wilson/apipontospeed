@@ -31,6 +31,7 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 const pontosCollection = db.collection("pontos");
 const usuariosCollection = db.collection("usuarios");
+const usuariosSistemaCollection = db.collection("usuariosSistema");
 
 // ==================== SERVER ====================
 // Criamos uma instância do Fastify para cada chamada
@@ -190,7 +191,7 @@ const buildApp = () => {
     }
   });
 
-  // 1) Registrar usuário
+  // 1) Registro de usuário
   app.post("/api/auth/register", async (req, reply) => {
     try {
       const { qra, patente, senha } = req.body as {
@@ -205,15 +206,17 @@ const buildApp = () => {
           .send({ error: "QRA, Patente e Senha são obrigatórios" });
       }
 
-      // Verifica se já existe
-      const snapshot = await usuariosCollection.where("qra", "==", qra).get();
+      // Verifica se já existe usuário com mesmo QRA
+      const snapshot = await usuariosSistemaCollection
+        .where("qra", "==", qra)
+        .get();
       if (!snapshot.empty) {
         return reply.status(400).send({ error: "QRA já cadastrado" });
       }
 
       const senhaHash = await bcrypt.hash(senha, 10);
 
-      const docRef = await usuariosCollection.add({
+      const docRef = await usuariosSistemaCollection.add({
         qra,
         patente,
         senha: senhaHash,
@@ -235,7 +238,9 @@ const buildApp = () => {
     try {
       const { qra, senha } = req.body as { qra: string; senha: string };
 
-      const snapshot = await usuariosCollection.where("qra", "==", qra).get();
+      const snapshot = await usuariosSistemaCollection
+        .where("qra", "==", qra)
+        .get();
       if (snapshot.empty) {
         return reply.status(401).send({ error: "Credenciais inválidas" });
       }
@@ -276,8 +281,7 @@ const buildApp = () => {
       if (patente) updates.patente = patente;
       if (senha) updates.senha = await bcrypt.hash(senha, 10);
 
-      await usuariosCollection.doc(id).update(updates);
-
+      await usuariosSistemaCollection.doc(id).update(updates);
       return reply.send({ message: "Usuário atualizado com sucesso" });
     } catch (err: any) {
       return reply.status(500).send({ error: err.message });
@@ -288,17 +292,17 @@ const buildApp = () => {
   app.delete("/api/auth/user/:id", async (req, reply) => {
     try {
       const { id } = req.params as { id: string };
-      await usuariosCollection.doc(id).delete();
+      await usuariosSistemaCollection.doc(id).delete();
       return reply.send({ message: "Usuário deletado com sucesso" });
     } catch (err: any) {
       return reply.status(500).send({ error: err.message });
     }
   });
 
-  // 5) Listar usuários
+  // 5) Listar todos os usuários
   app.get("/api/auth/users", async (_, reply) => {
     try {
-      const snapshot = await usuariosCollection.get();
+      const snapshot = await usuariosSistemaCollection.get();
       const usuarios: any[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
