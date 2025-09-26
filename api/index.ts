@@ -170,6 +170,18 @@ const buildApp = () => {
     }
   });
 
+  app.delete("/api/usuario/:id", async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+
+      await usuariosCollection.doc(id).delete();
+
+      reply.send({ message: "Usuário deletado com sucesso", id });
+    } catch (err: any) {
+      reply.status(500).send({ error: err.message });
+    }
+  });
+
   return app;
 };
 
