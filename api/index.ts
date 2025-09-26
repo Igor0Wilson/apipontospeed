@@ -3,6 +3,8 @@ import cors from "@fastify/cors";
 import * as admin from "firebase-admin";
 import dotenv from "dotenv";
 import { VercelRequest, VercelResponse } from "@vercel/node";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
@@ -40,6 +42,12 @@ const buildApp = () => {
     origin: "*",
     methods: ["GET", "POST", "PATCH", "OPTIONS"],
   });
+
+  function gerarToken(id: string) {
+    return jwt.sign({ id }, process.env.JWT_SECRET || "secret", {
+      expiresIn: "7d",
+    });
+  }
 
   // Rotas
   app.get("/api/ponto", async (request, reply) => {
@@ -179,6 +187,132 @@ const buildApp = () => {
       reply.send({ message: "Usuário deletado com sucesso", id });
     } catch (err: any) {
       reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // 1) Registrar usuário
+  app.post("/api/auth/register", async (req, reply) => {
+    try {
+      const { qra, patente, senha } = req.body as {
+        qra: string;
+        patente: string;
+        senha: string;
+      };
+
+      if (!qra || !patente || !senha) {
+        return reply
+          .status(400)
+          .send({ error: "QRA, Patente e Senha são obrigatórios" });
+      }
+
+      // Verifica se já existe
+      const snapshot = await usuariosCollection.where("qra", "==", qra).get();
+      if (!snapshot.empty) {
+        return reply.status(400).send({ error: "QRA já cadastrado" });
+      }
+
+      const senhaHash = await bcrypt.hash(senha, 10);
+
+      const docRef = await usuariosCollection.add({
+        qra,
+        patente,
+        senha: senhaHash,
+        criado_em: admin.firestore.FieldValue.serverTimestamp(),
+        atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return reply.send({
+        message: "Usuário registrado com sucesso",
+        id: docRef.id,
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // 2) Login
+  app.post("/api/auth/login", async (req, reply) => {
+    try {
+      const { qra, senha } = req.body as { qra: string; senha: string };
+
+      const snapshot = await usuariosCollection.where("qra", "==", qra).get();
+      if (snapshot.empty) {
+        return reply.status(401).send({ error: "Credenciais inválidas" });
+      }
+
+      const userDoc = snapshot.docs[0];
+      const usuario = userDoc.data();
+
+      const senhaValida = await bcrypt.compare(senha, usuario.senha);
+      if (!senhaValida) {
+        return reply.status(401).send({ error: "Credenciais inválidas" });
+      }
+
+      const token = gerarToken(userDoc.id);
+      return reply.send({
+        message: "Login bem-sucedido",
+        token,
+        usuario: { id: userDoc.id, qra: usuario.qra, patente: usuario.patente },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // 3) Atualizar usuário
+  app.patch("/api/auth/user/:id", async (req, reply) => {
+    try {
+      const { id } = req.params as { id: string };
+      const { qra, patente, senha } = req.body as {
+        qra?: string;
+        patente?: string;
+        senha?: string;
+      };
+
+      const updates: any = {
+        atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      if (qra) updates.qra = qra;
+      if (patente) updates.patente = patente;
+      if (senha) updates.senha = await bcrypt.hash(senha, 10);
+
+      await usuariosCollection.doc(id).update(updates);
+
+      return reply.send({ message: "Usuário atualizado com sucesso" });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // 4) Deletar usuário
+  app.delete("/api/auth/user/:id", async (req, reply) => {
+    try {
+      const { id } = req.params as { id: string };
+      await usuariosCollection.doc(id).delete();
+      return reply.send({ message: "Usuário deletado com sucesso" });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // 5) Listar usuários
+  app.get("/api/auth/users", async (_, reply) => {
+    try {
+      const snapshot = await usuariosCollection.get();
+      const usuarios: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        usuarios.push({
+          id: doc.id,
+          qra: data.qra,
+          patente: data.patente,
+          criado_em: data.criado_em,
+          atualizado_em: data.atualizado_em,
+        });
+      });
+      return reply.send({ usuarios });
+    } catch (err: any) {
+      return reply.status(500).send({ error: err.message });
     }
   });
 
