@@ -41,7 +41,8 @@ const buildApp = () => {
   // CORS
   app.register(cors, {
     origin: "*",
-    methods: ["GET", "POST", "PATCH", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   });
 
   function gerarToken(id: string) {
