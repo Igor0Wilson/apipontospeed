@@ -239,46 +239,25 @@ const buildApp = () => {
     try {
       const { qra, senha } = req.body as { qra: string; senha: string };
 
-      if (!qra || !senha)
+      if (!qra || !senha) {
         return reply
           .status(400)
           .send({ error: "QRA e senha são obrigatórios" });
+      }
 
       const snapshot = await usuariosSistemaCollection
         .where("qra", "==", qra)
         .get();
-      if (snapshot.empty)
+      if (snapshot.empty) {
         return reply.status(401).send({ error: "Credenciais inválidas" });
+      }
 
       const userDoc = snapshot.docs[0];
       const usuario = userDoc.data();
 
-      let senhaValida = false;
-
-      // Verifica se a senha no banco é hash (bcrypt) ou texto simples
-      if (
-        usuario.senha.startsWith("$2a$") ||
-        usuario.senha.startsWith("$2b$") ||
-        usuario.senha.startsWith("$2y$")
-      ) {
-        // Hash bcrypt
-        senhaValida = await bcrypt.compare(senha, usuario.senha);
-      } else {
-        // Texto simples
-        senhaValida = usuario.senha === senha;
-
-        // Converte para hash bcrypt automaticamente
-        if (senhaValida) {
-          const senhaHash = await bcrypt.hash(senha, 10);
-          await usuariosSistemaCollection.doc(userDoc.id).update({
-            senha: senhaHash,
-            atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        }
-      }
-
-      if (!senhaValida)
+      if (usuario.senha !== senha) {
         return reply.status(401).send({ error: "Credenciais inválidas" });
+      }
 
       const token = gerarToken(userDoc.id);
 
