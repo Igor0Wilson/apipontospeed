@@ -28,6 +28,7 @@ if (!admin.apps.length) {
 // Firestore
 const db = admin.firestore();
 const pontosCollection = db.collection("pontos");
+const usuariosCollection = db.collection("usuarios");
 
 // ==================== SERVER ====================
 // Criamos uma instância do Fastify para cada chamada
@@ -104,6 +105,67 @@ const buildApp = () => {
       reply.send({ message: "Ponto atualizado com sucesso", id: pontoId });
     } catch (err: any) {
       console.error("Erro ao atualizar ponto:", err);
+      reply.status(500).send({ error: err.message });
+    }
+  });
+
+  app.get("/api/usuario", async (request, reply) => {
+    try {
+      const snapshot = await usuariosCollection.get();
+      const usuarios: any[] = [];
+      snapshot.forEach((doc) => usuarios.push({ id: doc.id, ...doc.data() }));
+      return { message: "Usuários recuperados com sucesso", usuarios };
+    } catch (err: any) {
+      console.error("Erro ao buscar usuários:", err);
+      reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // Criar novo usuário
+  app.post("/api/usuario", async (request, reply) => {
+    try {
+      const usuario = request.body as {
+        qra: string;
+        patente: string;
+      };
+
+      if (!usuario.qra || !usuario.patente) {
+        return reply
+          .status(400)
+          .send({ error: "QRA e Patente são obrigatórios" });
+      }
+
+      const docRef = await usuariosCollection.add({
+        qra: usuario.qra,
+        patente: usuario.patente,
+        criado_em: admin.firestore.FieldValue.serverTimestamp(),
+        atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      reply.send({ message: "Usuário criado com sucesso", id: docRef.id });
+    } catch (err: any) {
+      console.error("Erro ao salvar usuário:", err);
+      reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // Editar usuário
+  app.patch("/api/usuario/:id", async (request, reply) => {
+    try {
+      const { id: usuarioId } = request.params as { id: string };
+      const usuarioAtualizado = request.body as {
+        qra?: string;
+        patente?: string;
+      };
+
+      await usuariosCollection.doc(usuarioId).update({
+        ...usuarioAtualizado,
+        atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      reply.send({ message: "Usuário atualizado com sucesso", id: usuarioId });
+    } catch (err: any) {
+      console.error("Erro ao atualizar usuário:", err);
       reply.status(500).send({ error: err.message });
     }
   });
