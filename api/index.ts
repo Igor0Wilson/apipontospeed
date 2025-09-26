@@ -235,50 +235,59 @@ const buildApp = () => {
   });
 
   // 2) Login
-  // 2) Login
   app.post("/api/auth/login", async (req, reply) => {
     try {
-      let { qra, senha } = req.body as { qra: string; senha: string };
+      const { qra, senha } = req.body as { qra: string; senha: string };
 
-      // Trim e uppercase para evitar problemas de espaços e case
-      qra = qra.trim().toUpperCase();
-      senha = senha.trim();
+      if (!qra || !senha)
+        return reply
+          .status(400)
+          .send({ error: "QRA e senha são obrigatórios" });
 
-      // Busca o usuário pelo QRA
       const snapshot = await usuariosSistemaCollection
         .where("qra", "==", qra)
         .get();
-
-      if (snapshot.empty) {
-        console.log("Login falhou: QRA não encontrado", qra);
+      if (snapshot.empty)
         return reply.status(401).send({ error: "Credenciais inválidas" });
-      }
 
       const userDoc = snapshot.docs[0];
       const usuario = userDoc.data();
 
-      // Verifica se a senha bate
-      const senhaValida = await bcrypt.compare(senha, usuario.senha);
-      if (!senhaValida) {
-        console.log("Login falhou: senha incorreta para QRA", qra);
-        return reply.status(401).send({ error: "Credenciais inválidas" });
+      let senhaValida = false;
+
+      // Verifica se a senha no banco é hash (bcrypt) ou texto simples
+      if (
+        usuario.senha.startsWith("$2a$") ||
+        usuario.senha.startsWith("$2b$") ||
+        usuario.senha.startsWith("$2y$")
+      ) {
+        // Hash bcrypt
+        senhaValida = await bcrypt.compare(senha, usuario.senha);
+      } else {
+        // Texto simples
+        senhaValida = usuario.senha === senha;
+
+        // Converte para hash bcrypt automaticamente
+        if (senhaValida) {
+          const senhaHash = await bcrypt.hash(senha, 10);
+          await usuariosSistemaCollection.doc(userDoc.id).update({
+            senha: senhaHash,
+            atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
       }
 
-      // Gera o token
+      if (!senhaValida)
+        return reply.status(401).send({ error: "Credenciais inválidas" });
+
       const token = gerarToken(userDoc.id);
 
-      // Retorna sucesso
       return reply.send({
         message: "Login bem-sucedido",
         token,
-        usuario: {
-          id: userDoc.id,
-          qra: usuario.qra,
-          patente: usuario.patente,
-        },
+        usuario: { id: userDoc.id, qra: usuario.qra, patente: usuario.patente },
       });
     } catch (err: any) {
-      console.error("Erro no login:", err);
       return reply.status(500).send({ error: err.message });
     }
   });
