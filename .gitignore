@@ -3,3 +3,6 @@ node_modules
 serviceAccount.json
 
 .vercel
+
+# Credentials
+credentials.json
