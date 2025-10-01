@@ -14,22 +14,20 @@ const auth = new google.auth.GoogleAuth({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método não permitido" });
-  }
-
-  const body = req.body;
-
-  if (!Array.isArray(body) || body.length === 0) {
-    return res
-      .status(400)
-      .json({ error: "Nenhuma informação de prisão recebida" });
-  }
+  console.log("GOOGLE_CLIENT_EMAIL:", process.env.GOOGLE_CLIENT_EMAIL);
+  console.log("GOOGLE_PRIVATE_KEY_SET:", !!process.env.GOOGLE_PRIVATE_KEY);
 
   try {
     const sheets = google.sheets({ version: "v4", auth });
 
-    const values: string[][] = body.map((row: any) => [
+    const body: any[] = req.body;
+    if (!Array.isArray(body) || body.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Nenhuma informação de prisão recebida" });
+    }
+
+    const values = body.map((row) => [
       row.qra || "",
       row.patente || "",
       row.nomePreso || "",
@@ -44,10 +42,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requestBody: { values },
     });
 
-    console.log("Linhas adicionadas:", values.length);
-    return res.status(200).json({ success: true, rowsAdded: values.length });
+    return res
+      .status(200)
+      .json({ success: true, rowsAdded: values.length, result: response.data });
   } catch (err: any) {
-    console.error("Erro ao salvar prisão:", err.response?.data || err);
+    console.error("Erro detalhado:", err.response?.data || err);
 
     return res.status(500).json({
       error: "Falha ao salvar prisão",
