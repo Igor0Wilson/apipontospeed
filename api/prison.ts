@@ -5,7 +5,6 @@ import { google } from "googleapis";
 const spreadsheetId = "17pmRdk83dCvA12nGxRRCNemtH2VDX5UIwwtHKllz1qQ";
 const sheetName = "Página1";
 
-// Configura GoogleAuth usando variáveis de ambiente
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -15,14 +14,9 @@ const auth = new google.auth.GoogleAuth({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Permitido apenas POST
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método não permitido" });
   }
-
-  // Debug das variáveis
-  console.log("EMAIL:", process.env.GOOGLE_CLIENT_EMAIL);
-  console.log("PRIVATE_KEY SET?", !!process.env.GOOGLE_PRIVATE_KEY);
 
   const body = req.body;
 
@@ -35,7 +29,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const sheets = google.sheets({ version: "v4", auth });
 
-    // Transformar os dados para a planilha
     const values: string[][] = body.map((row: any) => [
       row.qra || "",
       row.patente || "",
@@ -51,11 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       requestBody: { values },
     });
 
-    return res
-      .status(200)
-      .json({ success: true, rowsAdded: values.length, result: response.data });
+    console.log("Linhas adicionadas:", values.length);
+    return res.status(200).json({ success: true, rowsAdded: values.length });
   } catch (err: any) {
-    console.error("Erro detalhado:", err.response?.data || err);
+    console.error("Erro ao salvar prisão:", err.response?.data || err);
+
     return res.status(500).json({
       error: "Falha ao salvar prisão",
       detail: err.response?.data || err.message || err,
