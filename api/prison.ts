@@ -11,43 +11,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Parse da service account do JSON em linha única
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT!);
+    // Lê o JSON da service account da variável de ambiente
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT) {
+      return res
+        .status(500)
+        .json({ error: "Variável GOOGLE_SERVICE_ACCOUNT não configurada" });
+    }
+
+    const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
 
     const auth = new google.auth.GoogleAuth({
-      credentials,
+      credentials: serviceAccount,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
 
     const sheets = google.sheets({ version: "v4", auth });
 
-    // Verifica se o corpo da requisição está correto
-    if (!req.body || !Array.isArray(req.body) || req.body.length === 0) {
+    // Pega os dados enviados no POST
+    const prisaoData = req.body; // já vem como array
+
+    if (!Array.isArray(prisaoData) || prisaoData.length === 0) {
       return res
         .status(400)
         .json({ error: "Nenhuma informação de prisão recebida" });
     }
 
-    // Mapear os dados recebidos para a planilha
-    const values: string[][] = req.body.map((item: any) => [
-      item.qra || "",
-      item.patente || "",
-      item.nomePreso || "",
-      item.rg || "",
-      item.data || new Date().toISOString(),
+    const values: string[][] = prisaoData.map((item) => [
+      item.qra,
+      item.patente,
+      item.nomePreso,
+      item.rg,
+      item.data,
     ]);
 
-    const response = await sheets.spreadsheets.values.append({
+    await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: `${sheetName}!A1`,
       valueInputOption: "USER_ENTERED",
       requestBody: { values },
     });
 
-    return res.status(200).json({ success: true, result: response.data });
+    return res.status(200).json({ success: true });
   } catch (err: any) {
     console.error("Erro detalhado:", err.response?.data || err);
-
     return res.status(500).json({
       error: "Falha ao salvar prisão",
       detail: err.response?.data || err.message || err,
