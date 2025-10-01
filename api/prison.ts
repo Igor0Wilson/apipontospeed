@@ -1,17 +1,18 @@
-import express, { Request, Response } from "express";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { google } from "googleapis";
 
-const router = express.Router();
-
 const auth = new google.auth.GoogleAuth({
-  keyFile: "credentials.json",
+  keyFile: "credentials.json", // ou use variáveis de ambiente
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 
-const spreadsheetId = "17pmRdk83dCvA12nGxRRCNemtH2VDX5UIwwtHKllz1qQ";
-const sheetName = "Página1";
+// IDs diferentes se você quiser planilhas separadas
+const SPREADSHEETS = {
+  prisao: "17pmRdk83dCvA12nGxRRCNemtH2VDX5UIwwtHKllz1qQ",
+  prison: "OUTRO_SPREADSHEET_ID",
+};
 
-interface PrisaoData {
+interface PrisonData {
   qra?: string;
   patente?: string;
   nomePreso?: string;
@@ -19,25 +20,28 @@ interface PrisaoData {
   data?: string;
 }
 
-router.post("/", async (req: Request, res: Response) => {
-  try {
-    const body: PrisaoData[] = req.body;
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Método não permitido" });
+  }
 
-    if (!Array.isArray(body) || body.length === 0) {
-      return res
-        .status(400)
-        .json({ error: "Nenhuma informação de prisão recebida" });
+  try {
+    const { tipo, data } = req.body as {
+      tipo: "prisao" | "prison";
+      data: PrisonData[];
+    };
+
+    if (!tipo || !SPREADSHEETS[tipo]) {
+      return res.status(400).json({ error: "Tipo inválido" });
     }
 
-    // 👇 força cast para resolver incompatibilidade de typings
-    const client = (await auth.getClient()) as unknown as string;
+    if (!Array.isArray(data) || data.length === 0) {
+      return res.status(400).json({ error: "Nenhuma informação recebida" });
+    }
 
-    const sheets = google.sheets({
-      version: "v4",
-      auth: client,
-    });
+    const sheets = google.sheets({ version: "v4", auth });
 
-    const values: string[][] = body.map((row) => [
+    const values: string[][] = data.map((row) => [
       row.qra || "",
       row.patente || "",
       row.nomePreso || "",
@@ -46,17 +50,15 @@ router.post("/", async (req: Request, res: Response) => {
     ]);
 
     await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: `${sheetName}!A3`,
+      spreadsheetId: SPREADSHEETS[tipo],
+      range: "Página1!A3",
       valueInputOption: "USER_ENTERED",
       requestBody: { values },
     });
 
-    res.json({ success: true, rowsAdded: values.length });
+    res.status(200).json({ success: true, rowsAdded: values.length, tipo });
   } catch (err) {
     console.error("Erro ao salvar prisão:", err);
     res.status(500).json({ error: "Falha ao salvar prisão" });
   }
-});
-
-export default router;
+}
