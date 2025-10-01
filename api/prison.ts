@@ -1,19 +1,64 @@
 // /api/prison.ts
 import { VercelRequest, VercelResponse } from "@vercel/node";
+import { google } from "googleapis";
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  // Permitir GET apenas para debug
-  if (req.method === "GET") {
-    return res.status(200).json({
-      GOOGLE_CLIENT_EMAIL: process.env.GOOGLE_CLIENT_EMAIL ?? "undefined",
-      GOOGLE_PRIVATE_KEY_SET: !!process.env.GOOGLE_PRIVATE_KEY,
+const spreadsheetId = "17pmRdk83dCvA12nGxRRCNemtH2VDX5UIwwtHKllz1qQ";
+const sheetName = "Página1";
+
+// Configura GoogleAuth usando variáveis de ambiente
+const auth = new google.auth.GoogleAuth({
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+  },
+  scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+});
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Permitido apenas POST
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Método não permitido" });
+  }
+
+  // Debug das variáveis
+  console.log("EMAIL:", process.env.GOOGLE_CLIENT_EMAIL);
+  console.log("PRIVATE_KEY SET?", !!process.env.GOOGLE_PRIVATE_KEY);
+
+  const body = req.body;
+
+  if (!Array.isArray(body) || body.length === 0) {
+    return res
+      .status(400)
+      .json({ error: "Nenhuma informação de prisão recebida" });
+  }
+
+  try {
+    const sheets = google.sheets({ version: "v4", auth });
+
+    // Transformar os dados para a planilha
+    const values: string[][] = body.map((row: any) => [
+      row.qra || "",
+      row.patente || "",
+      row.nomePreso || "",
+      row.rg || "",
+      row.data || "",
+    ]);
+
+    const response = await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: `${sheetName}!A3`,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values },
+    });
+
+    return res
+      .status(200)
+      .json({ success: true, rowsAdded: values.length, result: response.data });
+  } catch (err: any) {
+    console.error("Erro detalhado:", err.response?.data || err);
+    return res.status(500).json({
+      error: "Falha ao salvar prisão",
+      detail: err.response?.data || err.message || err,
     });
   }
-
-  // POST normal
-  if (req.method === "POST") {
-    return res.status(200).json({ message: "POST recebido" });
-  }
-
-  return res.status(405).json({ error: "Método não permitido" });
 }
