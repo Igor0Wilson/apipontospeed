@@ -14,26 +14,54 @@ const auth = new google.auth.GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 });
 
+interface PrisaoData {
+  qra?: string;
+  patente?: string;
+  nomePreso?: string;
+  rg?: string;
+  data?: string;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Método não permitido" });
+  }
+
   try {
+    const body: PrisaoData[] = req.body;
+
+    if (!Array.isArray(body) || body.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Nenhuma informação de prisão recebida" });
+    }
+
     const sheets = google.sheets({ version: "v4", auth });
 
-    // Linha de teste
-    const values: string[][] = [["TESTE", "API", new Date().toISOString()]];
+    // Transformar o body em linhas para a planilha
+    const values: string[][] = body.map((row) => [
+      row.qra || "",
+      row.patente || "",
+      row.nomePreso || "",
+      row.rg || "",
+      row.data || "",
+    ]);
 
     const response = await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `${sheetName}!A1`,
+      range: `${sheetName}!A3`, // começa na linha 3
       valueInputOption: "USER_ENTERED",
       requestBody: { values },
     });
 
-    return res.status(200).json({ success: true, result: response.data });
+    return res
+      .status(200)
+      .json({ success: true, rowsAdded: values.length, result: response.data });
   } catch (err: any) {
     console.error("Erro detalhado:", err.response?.data || err);
 
     return res.status(500).json({
-      error: "Falha ao salvar linha de teste",
+      error: "Falha ao salvar prisão",
       detail: err.response?.data || err.message || err,
     });
   }
